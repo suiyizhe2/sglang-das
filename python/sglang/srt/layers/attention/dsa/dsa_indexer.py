@@ -1590,17 +1590,17 @@ class Indexer(DSANPUIndexerMixin, BaseFusedOp):
             q_offset, k_offset, device_index
         )
 
-        request_slices = ()
+        group_slices = ()
         if (
             _is_hcu
             and envs.SGLANG_DSA_MQA_SPLIT_BY_SEQ.get()
             and metadata.topk_backend.is_sgl_kernel()
         ):
-            request_slices = metadata.mqa_request_slices
-            if request_slices:
-                assert request_slices[-1][1] == q_offset
+            group_slices = metadata.mqa_request_slices
+            if group_slices:
+                assert group_slices[-1][1] == q_offset
 
-        if not need_chunk and not request_slices:
+        if not need_chunk and not group_slices:
             assert q_fp8[:q_offset].shape[0] != 0
             with self._with_real_sm_count():
                 if use_bf16_index_cache:
@@ -1672,13 +1672,13 @@ class Indexer(DSANPUIndexerMixin, BaseFusedOp):
                 global_topk_offset.shape[0] >= q_offset
             ), f"topk_indices_offset too short: {global_topk_offset.shape[0]} < {q_offset}"
 
-        slices = request_slices or ((0, q_offset, 0, k_offset),)
+        slices = group_slices or ((0, q_offset, 0, k_offset),)
         for start, end, k_start, k_end in iter_mqa_chunks(
             slices, logits_budget_bytes, self._MQA_LOGITS_BYTES_PER_ELEM
         ):
-            # Logits columns become request-local; output offsets stay global.
-            chunk_ks = ks[start:end] - k_start if request_slices else ks[start:end]
-            chunk_ke = ke[start:end] - k_start if request_slices else ke[start:end]
+            # Logits columns become group-local; output offsets stay global.
+            chunk_ks = ks[start:end] - k_start if group_slices else ks[start:end]
+            chunk_ke = ke[start:end] - k_start if group_slices else ke[start:end]
 
             with self._with_real_sm_count():
                 if use_bf16_index_cache:
