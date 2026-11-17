@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Tuple, Union
 
 import torch
 
+from sglang.srt.configs.model_config import is_deepseek_dsa
 from sglang.srt.dllm.config import DllmConfig
 from sglang.srt.environ import envs
 from sglang.srt.layers.cp.utils import (
@@ -41,6 +42,8 @@ from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTe
 from sglang.srt.model_executor.forward_context import (
     ForwardContext,
     forward_context,
+    get_attn_backend,
+    has_forward_context,
     get_req_to_token_pool,
     get_token_to_kv_pool,
 )
@@ -224,7 +227,13 @@ class EagerRunner(BaseRunner):
             return model_runner.decode_attn_backend, forward_context(
                 ForwardContext(attn_backend=model_runner.decode_attn_backend)
             )
-        return model_runner.attn_backend, contextlib.nullcontext()
+        # EAGLE publishes a different backend for each draft step. Planning
+        # must target the same backend that the model reads from ForwardContext,
+        # rather than the runner's default (draft-extend) backend.
+        attn_backend = (
+            get_attn_backend() if has_forward_context() else model_runner.attn_backend
+        )
+        return attn_backend, contextlib.nullcontext()
 
     def _execute_decode(
         self,
@@ -281,8 +290,17 @@ class EagerRunner(BaseRunner):
             or cp_v2_active
             or forward_batch.forward_mode.is_target_verify()
         ):
-            if model_runner.ps.attn_dcp_size > 1 and hasattr(
-                model_runner.model, "prepare_context_parallel_metadata_for_dcp"
+            # MLA target verify and every DSA DCP phase use rank-local KV
+            # with gathered Q, matching is_dcp_mla_decode_phase. The prefix-KV
+            # gather planner below is only for the remaining dense extend
+            # phases; speculative verify has no extend_prefix_lens at all.
+            if (
+                model_runner.ps.attn_dcp_size > 1
+                and not forward_batch.forward_mode.is_target_verify()
+                and not is_deepseek_dsa(model_runner.model_config.hf_config)
+                and hasattr(
+                    model_runner.model, "prepare_context_parallel_metadata_for_dcp"
+                )
             ):
                 # prepare kv cache buffer for dcp to gather kv cache
                 forward_batch.attn_dcp_metadata = (

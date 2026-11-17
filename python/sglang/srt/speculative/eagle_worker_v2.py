@@ -707,7 +707,15 @@ class EagleDraftWorker(EagleDraftWorkerBase):
                     # Skip attention backend init for 1-step draft,
                     # `draft_forward` only does sample in this case.
                     self.draft_attn_backend.init_forward_metadata(forward_batch)
-                    forward_batch.mark_forward_metadata_ready()
+                    # Some backends can safely rebuild the active step's plan
+                    # after eager DP padding changes the batch geometry.
+                    forward_batch.mark_forward_metadata_ready(
+                        replan_equivalent=getattr(
+                            self.draft_attn_backend,
+                            "eager_metadata_replan_equivalent",
+                            False,
+                        )
+                    )
                 parent_list, top_scores_index, draft_tokens, draft_probs = (
                     self.draft_forward(forward_batch)
                 )

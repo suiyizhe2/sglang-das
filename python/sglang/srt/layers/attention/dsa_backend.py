@@ -4086,6 +4086,11 @@ class DeepseekSparseAttnBackend(
 
 class DeepseekSparseAttnMultiStepBackend:
 
+    # Eager DP synchronization may pad an already pre-planned draft batch.
+    # Each DSA step has an independent init_forward_metadata implementation;
+    # EagerRunner can rebuild the active step with the final padded geometry.
+    eager_metadata_replan_equivalent: bool = True
+
     # Per-step draft decode replays from precomputed GPU metadata; opt out so
     # decide_needs_cpu_seq_lens' OR over the backends stays False.
     needs_cpu_seq_lens: bool = False
