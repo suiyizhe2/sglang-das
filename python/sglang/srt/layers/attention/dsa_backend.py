@@ -242,9 +242,9 @@ def _validate_dsa_dcp_launch(
             "DSA DCP does not support fused DSA top-k in the first phase; set "
             "SGLANG_DSA_FUSE_TOPK=false."
         )
-    if dcp_comm_backend != "ag_rs":
+    if dcp_comm_backend not in ("ag_rs", "a2a"):
         raise ValueError(
-            "DSA DCP first-phase support requires the ag_rs communication backend; "
+            "DSA DCP supports the ag_rs and a2a communication backends; "
             f"got {dcp_comm_backend}."
         )
 

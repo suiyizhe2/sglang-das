@@ -57,3 +57,11 @@ comparison workload uses session workers that send requests sequentially within
 each session; it has not been claimed as the same completed regression.
 Historical trace gaps are a separate investigation: this change has not been
 shown to remove them.
+
+## Additional container snapshot change
+
+A separate commit preserves the container snapshot's DSA launch-validation
+change: `dcp_comm_backend` accepts both `ag_rs` and `a2a`, instead of only
+`ag_rs`. This is a validation-guard change; it does not add an A2A implementation.
+The completed device regression above used `ag_rs`. A2A correctness,
+compatibility and performance have not been established by that regression.
